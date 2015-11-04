@@ -5,13 +5,10 @@ import IR.Lens
 KeyCode : Type
 KeyCode = Int
 
-record Key : Type where
-  MkKey : (keyCode : KeyCode) ->
-          (keyHasAlt : Bool) ->
-          (keyHasCmd : Bool) ->
-          (keyHasCtrl : Bool) ->
-          (keyHasShift : Bool) ->
-          Key
+record Key where
+  constructor MkKey
+  keyCode : KeyCode
+  keyHasAlt, keyHasCmd, keyHasCtrl, keyHasShift : Bool
 
 instance Eq Key where
   (==) (MkKey a b c d e) (MkKey a' b' c' d' e') = a == a' && b == b' && c == c' && d == d' && e == e'
@@ -57,13 +54,13 @@ data Event = KeyEvent Key
 
 eventFromPtr : Ptr -> IO Event
 eventFromPtr p = do
-  t <- mkForeign (FFun "irEventType" [FPtr] FInt) p
-  c <- mkForeign (FFun "irEventKeyCode" [FPtr] FInt) p
-  alt <- map (/= 0) (mkForeign (FFun "irEventKeyAlternate" [FPtr] FInt) p)
-  cmd <- map (/= 0) (mkForeign (FFun "irEventKeyCommand" [FPtr] FInt) p)
-  ctrl <- map (/= 0) (mkForeign (FFun "irEventKeyControl" [FPtr] FInt) p)
-  shift <- map (/= 0) (mkForeign (FFun "irEventKeyShift" [FPtr] FInt) p)
-  mkForeign (FFun "irEventFree" [FPtr] FUnit) p
+  t <- foreign FFI_C "irEventType" (Ptr -> IO Int) p
+  c <- foreign FFI_C "irEventKeyCode" (Ptr -> IO Int) p
+  alt <- map (/= 0) (foreign FFI_C "irEventKeyAlternate" (Ptr -> IO Int) p)
+  cmd <- map (/= 0) (foreign FFI_C "irEventKeyCommand" (Ptr -> IO Int) p)
+  ctrl <- map (/= 0) (foreign FFI_C "irEventKeyControl" (Ptr -> IO Int) p)
+  shift <- map (/= 0) (foreign FFI_C "irEventKeyShift" (Ptr -> IO Int) p)
+  foreign FFI_C "irEventFree" (Ptr -> IO Unit) p
   return (case t of
     0 => KeyEvent (MkKey c alt cmd ctrl shift)
     1 => RefreshEvent

@@ -20,10 +20,10 @@ putErrLn : String -> IO ()
 putErrLn s = fwrite stderr (s ++ "\n")
 
 quartzInit : IO Bool
-quartzInit = map (/= 0) (mkForeign (FFun "quartzInit" [] FInt))
+quartzInit = map (/= 0) (foreign FFI_C "quartzInit" (Unit -> Int) ())
 
 quartzSpacesCount : IO Int
-quartzSpacesCount = mkForeign (FFun "quartzSpacesCount" [] FInt)
+quartzSpacesCount = foreign FFI_C "quartzSpacesCount" (Unit -> Int) ()
 
 QuartzWindow : Type
 QuartzWindow = Int
@@ -39,20 +39,20 @@ QUARTZ = IR QuartzWindow QuartzSpace
 
 quartzGetWindows : IO (List QuartzWindow, QuartzWindow)
 quartzGetWindows = do
-  p <- mkForeign (FFun "quartzWindows" [] FPtr)
-  l <- mkForeign (FFun "quartzWindowsLength" [FPtr] FInt) p
-  wids <- traverse (\a => mkForeign (FFun "quartzWindowId" [FPtr, FInt] FInt) p a) [0..l-1]
-  focused <- mkForeign (FFun "quartzWindowsFocusedId" [FPtr] FInt) p
-  mkForeign (FFun "quartzWindowsFree" [FPtr] FUnit) p
+  p <- foreign FFI_C "quartzWindows" (Unit -> Ptr) ()
+  l <- foreign FFI_C "quartzWindowsLength" (Ptr -> Int) p
+  wids <- traverse (\a => foreign FFI_C "quartzWindowId" (Ptr -> Int -> Int) p a) [0..l-1]
+  focused <- foreign FFI_C "quartzWindowsFocusedId" (Ptr -> Int) p
+  foreign FFI_C "quartzWindowsFree" (Ptr -> Unit) p
   return (wids, focused)
 
 quartzTileWindow : QuartzWindow -> Rectangle -> IO ()
 quartzTileWindow wid r =
-  mkForeign (FFun "quartzWindowSetRect" [FInt, FFloat, FFloat, FFloat, FFloat] FUnit) wid (rectX r) (rectY r) (rectW r) (rectH r)
+  foreign FFI_C "quartzWindowSetRect" (Int -> Float -> Float -> Float -> Float -> Unit) wid (rectX r) (rectY r) (rectW r) (rectH r)
 
 quartzFocusWindow : QuartzWindow -> IO ()
 quartzFocusWindow wid =
-  mkForeign (FFun "quartzWindowSetFocus" [FInt] FUnit) wid
+  foreign FFI_C "quartzWindowSetFocus" (Int -> Unit) wid
 
 quartzRefresh : QuartzState -> IO QuartzState
 quartzRefresh s = do
@@ -65,20 +65,20 @@ quartzRefresh s = do
 
 quartzGetFrame : Ptr -> Int -> IO Rectangle
 quartzGetFrame p i = do
-  r <- mkForeign (FFun "quartzScreensFrame" [FPtr, FInt] FPtr) p i
-  x <- mkForeign (FFun "irFrameX" [FPtr] FFloat) r
-  y <- mkForeign (FFun "irFrameY" [FPtr] FFloat) r
-  w <- mkForeign (FFun "irFrameW" [FPtr] FFloat) r
-  h <- mkForeign (FFun "irFrameH" [FPtr] FFloat) r
+  r <- foreign FFI_C "quartzScreensFrame" (Ptr -> Int -> Ptr) p i
+  x <- foreign FFI_C "irFrameX" (Ptr -> Float) r
+  y <- foreign FFI_C "irFrameY" (Ptr -> Float) r
+  w <- foreign FFI_C "irFrameW" (Ptr -> Float) r
+  h <- foreign FFI_C "irFrameH" (Ptr -> Float) r
   return (MkRectangle x y w h)
 
 quartzGetFrames : IO (n ** Vect (S n) Rectangle)
 quartzGetFrames = do
-  p <- mkForeign (FFun "quartzScreens" [] FPtr)
-  l <- mkForeign (FFun "quartzScreensLength" [FPtr] FInt) p
+  p <- foreign FFI_C "quartzScreens" (Unit -> Ptr) ()
+  l <- foreign FFI_C "quartzScreensLength" (Ptr -> Int) p
   mainFrame <- quartzGetFrame p 0
   frames <- traverse (quartzGetFrame p) [1..l-1]
-  mkForeign (FFun "quartzScreensFree" [FPtr] FUnit) p
+  foreign FFI_C "quartzScreensFree" (Ptr -> Unit) p
   return (length frames ** mainFrame :: fromList frames)
 
 quartzGrabKeys : List Key -> IO ()
@@ -90,12 +90,12 @@ quartzGrabKeys keys =
         let cmd = f $ keyHasCmd' ^$ key
         let ctrl = f $ keyHasCtrl' ^$ key
         let shift = f $ keyHasShift' ^$ key
-        mkForeign (FFun "quartzGrabKey" [FInt, FInt, FInt, FInt, FInt] FUnit) c alt cmd ctrl shift
+        foreign FFI_C "quartzGrabKey" (Int -> Int -> Int -> Int -> Int -> Unit) c alt cmd ctrl shift
   in traverse_ grabKey keys
 
 instance Handler (IREffect QuartzWindow QuartzSpace) IO where
   handle () GetEvent k = do
-    p <- mkForeign (FFun "quartzEvent" [] FPtr)
+    p <- foreign FFI_C "quartzEvent" (Unit -> Ptr)
     e <- eventFromPtr p
     k e ()
   handle () (GrabKeys keys) k = do
@@ -167,4 +167,4 @@ main = do
   then do
     putErrLn "iridium doesn't have Accessibility permission."
     putErrLn "You can enable this under Privacy in Security & Privacy in System Preferences."
-  else runInit [(), !initialQuartzState, quartzConf] runIR
+  else runInit [(), !initialQuartzState] runIR quartzConf
